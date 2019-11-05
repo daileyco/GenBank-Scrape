@@ -1,0 +1,817 @@
+---
+title: "GenBank Parse"
+author: "Cody Dailey"
+date: "October 25, 2019"
+output: html_document
+---
+
+
+
+```{r}
+GenBank.Files <- list.files("./search_results")
+
+GenBank.Files.Info <- file.info(paste0("./search_results/", GenBank.Files[1]))
+
+for(file in 2:length(GenBank.Files)){
+  GenBank.Files.Info[file,] <- file.info(paste0("./search_results/", GenBank.Files[file]))
+}
+
+GenBank.Files.Info$File.Name <- NA
+
+for(row.number in 1:nrow(GenBank.Files.Info)){
+  GenBank.Files.Info$File.Name[row.number] <- substr(rownames(GenBank.Files.Info)[row.number],18,nchar(rownames(GenBank.Files.Info)[row.number]))
+}
+
+
+GenBank.Files.Info <- GenBank.Files.Info[order(GenBank.Files.Info$mtime),]
+
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+Sequence.Data <- list()
+
+
+for(file in 1:length(GenBank.Files.Info$File.Name)){
+
+print(paste("Parsing GenBank File / Popset #", file, "of", length(GenBank.Files.Info$File.Name)))
+  
+  gb.file <- unlist(strsplit(as.character(unlist(read.delim(paste0("./search_results/",GenBank.Files.Info$File.Name[file]), header=F))), split=" "))[unlist(strsplit(as.character(unlist(read.delim(paste0("./search_results/",GenBank.Files.Info$File.Name[file]), header=F))), split=" "))!=""]
+
+
+  sequence.start <- 1 
+
+  sequence.stop <- match("//", gb.file)
+
+  next.sequence <- sequence.stop+1
+
+
+  sequences.in.popset <- list()
+
+
+  gb <- gb.file
+
+
+  index <- 1
+
+
+  while(next.sequence<length(gb)){
+  
+  
+    sequences.in.popset[[index]] <- gb[sequence.start:sequence.stop]
+  
+  
+    next.sequence <- sequence.stop+1
+  
+  
+    gb <- gb[next.sequence:length(gb)]
+  
+  
+    sequence.stop <- match("//", gb)
+  
+  
+    index <- index + 1
+
+    }
+
+
+  if(!is.na(gb[1])){sequences.in.popset[[index]] <- gb}
+
+
+print(paste("There were", length(sequences.in.popset), "sequences identified from this popset"))
+
+
+
+
+  Accessions <- c()
+
+  Sequence.Lengths <- c()
+
+  Sequence.Definitions <- c()
+
+  Comments <- c()
+
+  Organisms <- c()
+
+  Molecule.Types <- c()
+
+  Isolation.Sources <- c()
+
+  Locations <- c()
+
+  Collection.Dates <- c()
+
+  Sequences <- c()
+
+
+
+
+  for(sequence.index in 1:length(sequences.in.popset)){
+  
+ #print(paste("Parsing text from sequence #", sequence.index, "of", length(sequences.in.popset))) 
+    to.parse <- sequences.in.popset[[sequence.index]]
+  
+  
+    sections <- c("LOCUS", "DEFINITION", "ACCESSION", "COMMENT", "FEATURES", "ORIGIN")
+
+
+    Accessions[sequence.index] <- to.parse[{match(sections, to.parse)[1]+1}]
+  
+  
+    Sequence.Lengths[sequence.index] <- to.parse[{match(sections, to.parse)[1]+2}]
+  
+  
+    Sequence.Definitions[sequence.index] <- paste(to.parse[{match(sections, to.parse)[2]+1}:{match(sections, to.parse)[3]-1}], collapse=" ")
+  
+    
+    
+    
+  
+    if(!is.na(match(sections,to.parse)[4]) & !is.na(match(sections,to.parse)[5])){
+    
+      Comments[sequence.index] <- paste(to.parse[{match(sections, to.parse)[4]+1}:{match(sections, to.parse)[5]-1}], collapse=" ")
+  
+    
+    }else{
+        if(!is.na(match(sections,to.parse)[4])){
+          Comments[sequence.index] <- paste(to.parse[{match(sections, to.parse)[4]+1}:{match(sections, to.parse)[4]+13}], collapse=" ")
+        }else{Comments[sequence.index] <- NA}
+    }
+  
+    
+    
+    
+    
+    
+    
+    
+    features <- paste(to.parse[{match(sections, to.parse)[5]+1}:{match(sections, to.parse)[6]-1}], collapse=" ")
+  
+  
+    features2 <- as.character(strsplit(gsub("=", " ", gsub("/", " ", gsub("\"", " ", features))), split=" ")[[1]])[as.character(strsplit(gsub("=", " ", gsub("/", " ", gsub("\"", " ", features))), split=" ")[[1]])!=""]
+  
+  
+    features.sections <- c("organism", "mol_type", "isolate", "isolation_source", "db_xref", "country", "mRNA")
+  
+  
+    
+    
+    if(!is.na(match(features.sections,features2)[1]) & !is.na(match(features.sections,features2)[2])){
+    
+      Organisms[sequence.index] <- paste(features2[{match(features.sections,features2)[1]+1}:{match(features.sections,features2)[2]-1}], collapse=" ")
+    
+    }else{
+        if(!is.na(match(features.sections,features2)[1])){
+          Organisms[sequence.index] <- paste(features2[{match(features.sections,features2)[1]+1}:{match(features.sections,features2)[1]+4}], collapse=" ")
+        }else{Organisms[sequence.index] <- NA}
+    }
+  
+  
+    
+    
+    
+    if(!is.na(match(features.sections,features2)[2]) & !is.na(match(features.sections,features2)[3])){
+    
+      Molecule.Types[sequence.index] <- paste(features2[{match(features.sections,features2)[2]+1}:{match(features.sections,features2)[3]-1}], collapse=" ")
+  
+    
+    }else{
+      if(!is.na(match(features.sections,features2)[2])){
+        Molecule.Types[sequence.index] <- paste(features2[{match(features.sections,features2)[2]+1}:{match(features.sections,features2)[2]+5}], collapse=" ")
+      }else{Molecule.Types[sequence.index] <- NA}
+    }
+    
+    
+    
+  
+    if(!is.na(match(features.sections,features2)[4]) & !is.na(match(features.sections,features2)[5])){
+    
+      Isolation.Sources[sequence.index] <- paste(features2[{match(features.sections,features2)[4]+1}:{match(features.sections,features2)[5]-1}], collapse=" ")
+  
+    
+    }else{
+      if(!is.na(match(features.sections,features2)[4])){
+        Isolation.Sources[sequence.index] <- paste(features2[{match(features.sections,features2)[4]+1}:{match(features.sections,features2)[4]-14}], collapse=" ")
+      }else{Isolation.Sources[sequence.index] <- NA}
+    }
+  
+  
+    if(!is.na(match("collection_date", features2))){
+  
+    
+      Collection.Dates[sequence.index] <- paste(features2[{match("collection_date", features2)+1}:{match("collection_date", features2)+3}], collapse=" ")
+  
+    
+      if(!is.na(match(features.sections,features2)[6]) & !is.na(match("collection_date", features2))){
+      
+        Locations[sequence.index] <- paste(features2[{match(features.sections,features2)[6]+1}:{match("collection_date", features2)-1}], collapse=" ")
+
+      
+        }else{Locations[sequence.index] <- NA}
+    
+      
+      }else{
+  
+      
+        Collection.Dates[sequence.index] <- NA
+  
+      
+        if(!is.na(match(features.sections,features2)[6]) & !is.na(match(features.sections,features2)[7])){
+        
+          Locations[sequence.index] <- paste(features2[{match(features.sections,features2)[6]+1}:{match(features.sections,features2)[7]-1}], collapse=" ")
+
+        
+          }else{Locations[sequence.index] <- NA}
+        }
+  
+  
+    Sequences[sequence.index] <- paste(gsub("//", "", gsub('[[:digit:]]+', '', to.parse[{match("ORIGIN", to.parse)+1}:length(to.parse)])), collapse = "")
+  
+
+    }
+
+
+print(paste("Compiling sequence data for file / popset #", file, "of", length(GenBank.Files.Info$File.Name)))
+
+  Sequence.Data[[file]] <- as.data.frame(cbind(Accessions, Sequence.Lengths, Sequence.Definitions, Comments, Organisms, Molecule.Types, Isolation.Sources, Locations, Collection.Dates, Sequences))
+
+
+  }
+
+
+
+
+```
+
+
+
+
+```{r}
+#save(Sequence.Data, file="Sequence_Data_first_attempt_parse.rdata")
+#load("Sequence_Data_first_attempt_parse.rdata")
+
+#save(Sequence.Data, file="Sequence_Data_second_attempt_parse.rdata")
+load("Sequence_Data_second_attempt_parse.rdata")
+
+data <- as.data.frame(Sequence.Data[[1]])
+data$Popset <- 1
+
+for(i in 2:length(Sequence.Data)){
+  .data <- as.data.frame(Sequence.Data[[i]])
+  .data$Popset <- i
+  data<-rbind(data, .data)
+}
+
+
+```
+
+
+```{r}
+
+load("Popset_data_580_records.rdata")
+
+library(tidyverse)
+
+means <- data %>% group_by(Popset) %>% summarize(Mean.seq.length = mean(as.numeric(as.character(Sequence.Lengths))))
+
+
+data2 <- data[!duplicated(data$Popset),c("Popset", "Isolation.Sources", "Locations", "Collection.Dates", "Comments")] %>% left_join(means)
+
+
+Summary.Data <- cbind(Popset.Data, data2)
+
+
+Summary.Data$Popset.Type <- as.character(Summary.Data$Popset.Type)
+
+for(i in 1:nrow(Summary.Data)){
+Summary.Data$Popset.Type[i] <- unlist(strsplit(as.character(Summary.Data$Popset.Type[i]), split=","))[1]
+}
+
+text.to.remove <- c(" mRNA.*", " misc_feature.*", " collected_by.*", " <1..>.*", " note.*", " gene.*", " PCR_primers.*", " rRNA.*", " repeat_region.*", " country.*", " lat_lon.*")
+
+for(i in 1:length(text.to.remove)){
+  Summary.Data$Collection.Dates <- gsub(text.to.remove[i], "", Summary.Data$Collection.Dates)
+  Summary.Data$Locations <- gsub(text.to.remove[i], "", Summary.Data$Locations)
+  Summary.Data$Country <- gsub(":.*", "", Summary.Data$Locations)
+}
+
+
+Summary.Data$Assembly.Method <- gsub(".*Assembly Method :: ", "", Summary.Data$Comments)
+Summary.Data$Assembly.Method <- gsub(" Sequencing Technology.*", "", Summary.Data$Assembly.Method)
+Summary.Data$Assembly.Method <- gsub("##Assembly-Data-START##", "", Summary.Data$Assembly.Method)
+
+Summary.Data$Sequencing.Technology <- gsub(".*Sequencing Technology :: ", "", Summary.Data$Comments)
+Summary.Data$Sequencing.Technology <- gsub(" ##Assembly-Data-END##", "", Summary.Data$Sequencing.Technology)
+
+
+Summary.Data$Assembly.Method <- ifelse(Summary.Data$Assembly.Method=="", NA, Summary.Data$Assembly.Method)
+Summary.Data$Sequencing.Technology <- ifelse(Summary.Data$Sequencing.Technology=="", NA, Summary.Data$Sequencing.Technology)
+
+
+
+
+sources <- as.data.frame(Summary.Data$Isolation.Sources[!duplicated(Summary.Data$Isolation.Sources)])
+sources
+
+
+Summary.Data$Popset.N.Sequences <- as.numeric(as.character(Summary.Data$Popset.N.Sequences))
+Summary.Data$Popset.Type <- as.factor(Summary.Data$Popset.Type)
+Summary.Data$Country <- as.factor(Summary.Data$Country)
+Summary.Data$Assembly.Method <- as.factor(Summary.Data$Assembly.Method)
+Summary.Data$Sequencing.Technology <- as.factor(Summary.Data$Sequencing.Technology)
+
+
+Summary.Data$date1 <- c()
+Summary.Data$date2 <- c()
+
+for(i in 1:nrow(Summary.Data)){
+  Summary.Data$date1[i] <- unlist(strsplit(Summary.Data$Collection.Dates[i], " "))[1]
+  Summary.Data$date2[i] <- unlist(strsplit(Summary.Data$Collection.Dates[i], " "))[2]
+}
+
+
+```
+
+
+
+
+
+
+```{r}
+months <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+Summary.Data$date1a <- Summary.Data$date1
+Summary.Data$date2a <- Summary.Data$date2
+
+
+for(i in 1:12){
+  Summary.Data$date1a <- gsub(months[i], ifelse(i<10, paste0("0",i), paste0(i)), Summary.Data$date1a)
+  Summary.Data$date2a <- gsub(months[i], ifelse(i<10, paste0("0",i), paste0(i)), Summary.Data$date2a)
+
+}
+
+
+```
+
+
+
+
+
+
+```{r}
+
+for(i in 1:nrow(Summary.Data)){
+  if(!is.na(Summary.Data$date1[i])){
+  
+if(length(unlist(strsplit(Summary.Data$date1[i], split="-")))==1){
+  Summary.Data$date1a[i] <- paste0("01-01-", Summary.Data$date1a[i])
+  if(!is.na(Summary.Data$date2a[i])){
+  Summary.Data$date2a[i] <- paste0("01-01-", Summary.Data$date2a[i])
+  }
+  
+}else{
+  if(length(unlist(strsplit(Summary.Data$date1[i], split="-")))==2){
+    Summary.Data$date1a[i] <- paste0("01-", Summary.Data$date1a[i])
+  if(!is.na(Summary.Data$date2a[i])){
+  Summary.Data$date2a[i] <- paste0("01-", Summary.Data$date2a[i])
+  }
+ 
+  }
+}
+  }
+}
+
+Summary.Data$date1b <- as.Date(Summary.Data$date1a, "%d-%m-%Y")
+Summary.Data$date2b <- as.Date(Summary.Data$date2a, "%d-%m-%Y")
+
+
+
+
+
+
+summary(Summary.Data)
+
+```
+
+
+
+
+```{r}
+save(Summary.Data, file="Summary_Data_11042019.rdata")
+
+
+
+
+
+```
+
+
+
+
+
+```{r}
+write.csv(Summary.Data, file="summary_data_11042019.csv")
+
+
+
+
+
+```
+
+```{r}
+
+Summary.Data <- Summary.Data[,c("Popset.Title", "Popset.Type", "Popset.N.Sequences", "Popset.UID", "PubMed.Link", "Popset", "Isolation.Sources", "Mean.seq.length", "Country", "Assembly.Method", "Sequencing.Technology", "date1b", "date2b")]
+
+
+
+table(Summary.Data$Popset.Type)
+hist(Summary.Data$Popset.N.Sequences)
+test <- as.data.frame(ftable(as.character(Summary.Data$Isolation.Sources)))
+
+Summary.Data$Isolation.Sources2 <- ifelse(substr(as.character(Summary.Data$Isolation.Sources), 1,14)=="Infected human", "blood host Homo sapiens", 
+                                          ifelse(substr(as.character(Summary.Data$Isolation.Sources), 1,15)=="blood host Homo", "blood host Homo sapiens",as.character(Summary.Data$Isolation.Sources)))
+
+test <- as.data.frame(ftable(Summary.Data$Isolation.Sources2))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+data$Sequence.Lengths <- as.numeric(data$Sequence.Lengths)
+
+
+summary(data)
+
+
+test <- as.data.frame(ftable(data$Isolation.Sources))
+names(test)<-c("Isolation Source", "Frequency")
+test
+
+hist(data$Sequence.Lengths)
+
+test <- as.data.frame(ftable(data$Locations))
+names(test)<-c("Locations", "Frequency")
+test<-test[order(test$Frequency, decreasing = T),]
+rownames(test)<-c()
+test
+
+test<- as.data.frame(ftable(data$Collection.Dates))
+names(test)<-c("Collection Dates", "Frequency")
+test
+
+
+data.2 <- data[!duplicated(data$Popset),]
+
+test<-as.data.frame(ftable(data.2$Locations))
+names(test)<-c("Locations", "Frequency")
+test<-test[order(test$Frequency, decreasing=T),]
+rownames(test)<-c()
+test
+
+
+ftable(data.2$Isolation.Sources)
+ftable(data.2$Collection.Dates)
+
+ftable(data.2$Locations, data.2$Isolation.Sources)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+Sequence.Data <- list()
+
+
+for(file in 1:length(GenBank.Files.Info$File.Name)){
+
+print(paste("Parsing GenBank File / Popset #", file, "of", length(GenBank.Files.Info$File.Name)))
+  
+  gb.file <- unlist(strsplit(as.character(unlist(read.delim(paste0("./search_results/",GenBank.Files.Info$File.Name[file]), header=F))), split=" "))[unlist(strsplit(as.character(unlist(read.delim(paste0("./search_results/",GenBank.Files.Info$File.Name[file]), header=F))), split=" "))!=""]
+
+
+  sequence.start <- 1 
+
+  sequence.stop <- match("//", gb.file)
+
+  next.sequence <- sequence.stop+1
+
+
+  sequences.in.popset <- list()
+
+
+  gb <- gb.file
+
+
+  index <- 1
+
+
+  while(next.sequence<length(gb)){
+  
+  
+    sequences.in.popset[[index]] <- gb[sequence.start:sequence.stop]
+  
+  
+    next.sequence <- sequence.stop+1
+  
+  
+    gb <- gb[next.sequence:length(gb)]
+  
+  
+    sequence.stop <- match("//", gb)
+  
+  
+    index <- index + 1
+
+    }
+
+
+  sequences.in.popset[[index]] <- gb
+
+
+print(paste("There were", index, "sequences identified from this popset"))
+
+
+
+
+  Accessions <- c()
+
+  Sequence.Lengths <- c()
+
+  Sequence.Definitions <- c()
+
+  Comments <- c()
+
+  Organisms <- c()
+
+  Molecule.Types <- c()
+
+  Isolation.Sources <- c()
+
+  Locations <- c()
+
+  Collection.Dates <- c()
+
+  Sequences <- c()
+
+
+
+
+  for(sequence.index in 1:length(sequences.in.popset)){
+  
+ print(paste("Parsing text from sequence #", sequence.index, "of", length(sequences.in.popset))) 
+    to.parse <- sequences.in.popset[[sequence.index]]
+  
+  
+    sections <- c("LOCUS", "DEFINITION", "ACCESSION", "COMMENT", "FEATURES", "ORIGIN")
+
+ tryCatch({ 
+    Accessions[sequence.index] <- to.parse[{match(sections, to.parse)[1]+1}]
+  
+  
+    Sequence.Lengths[sequence.index] <- to.parse[{match(sections, to.parse)[1]+2}]
+  
+  
+    Sequence.Definitions[sequence.index] <- paste(to.parse[{match(sections, to.parse)[2]+1}:{match(sections, to.parse)[3]-1}], collapse=" ")
+  
+  
+    Comments[sequence.index] <- paste(to.parse[{match(sections, to.parse)[4]+1}:{match(sections, to.parse)[5]-1}], collapse=" ")
+  
+  
+    features <- paste(to.parse[{match(sections, to.parse)[5]+1}:{match(sections, to.parse)[6]-1}], collapse=" ")
+  
+  
+    features2 <- as.character(strsplit(gsub("=", " ", gsub("/", " ", gsub("\"", " ", features))), split=" ")[[1]])[as.character(strsplit(gsub("=", " ", gsub("/", " ", gsub("\"", " ", features))), split=" ")[[1]])!=""]
+  
+  
+    features.sections <- c("organism", "mol_type", "isolate", "isolation_source", "db_xref", "country", "mRNA")
+  
+  
+    Organisms[sequence.index] <- paste(features2[{match(features.sections,features2)[1]+1}:{match(features.sections,features2)[2]-1}], collapse=" ")
+  
+  
+    Molecule.Types[sequence.index] <- paste(features2[{match(features.sections,features2)[2]+1}:{match(features.sections,features2)[3]-1}], collapse=" ")
+  
+  
+    Isolation.Sources[sequence.index] <- paste(features2[{match(features.sections,features2)[4]+1}:{match(features.sections,features2)[5]-1}], collapse=" ")
+  
+  
+  
+    if(!is.na(match("collection_date", features2))){
+  
+    
+      Collection.Dates[sequence.index] <- paste(features2[{match("collection_date", features2)+1}:{match(features.sections,features2)[7]-1}], collapse=" ")
+  
+    
+      Locations[sequence.index] <- paste(features2[{match(features.sections,features2)[6]+1}:{match("collection_date", features2)-1}], collapse=" ")
+
+    
+      }else{
+  
+      
+        Collection.Dates[sequence.index] <- NA
+  
+      
+        Locations[sequence.index] <- paste(features2[{match(features.sections,features2)[6]+1}:{match(features.sections,features2)[7]-1}], collapse=" ")
+
+        }
+  
+  
+    Sequences[sequence.index] <- paste(gsub("//", "", gsub('[[:digit:]]+', '', to.parse[{match("ORIGIN", to.parse)+1}:length(to.parse)])), collapse = "")
+  
+})
+    }
+
+
+print(paste("Compiling sequence data for file / popset #", file, "of", length(GenBank.Files.Info$File.Name)))
+
+  Sequence.Data[[file]] <- as.data.frame(cbind(Accessions, Sequence.Lengths, Sequence.Definitions, Comments, Organisms, Molecule.Types, Isolation.Sources, Locations, Collection.Dates, Sequences))
+
+
+  }
+
+
+
+
+```
+
+
+
+
+
+
+
+```{r}
+pop.with.seq <- as.data.frame(cbind(Popset.Data[1,], Sequence.Data))
+
+
+
+Popset.with.sequences <- data.frame()
+
+Popset.with.sequences <- rbind(Popset.with.sequences, pop.with.seq)
+
+```

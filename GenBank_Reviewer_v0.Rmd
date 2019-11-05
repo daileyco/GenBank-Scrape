@@ -1,0 +1,118 @@
+---
+title: "GenBank_Review"
+author: "Cody Dailey"
+date: "November 4, 2019"
+output: html_document
+---
+
+```{r}
+load("Summary_Data_11042019.rdata")
+
+
+```
+
+
+```{r}
+
+library(knitr)
+
+
+kable(table(Summary.Data$Popset.Type))
+
+
+kable(table(Summary.Data$PubMed.Title))
+
+
+length(unique(Summary.Data$PubMed.Title)) # 162
+length(unique(Summary.Data$Popset.Title)) # 367
+
+test<-as.data.frame(ftable(Summary.Data$Country))
+names(test)<-c("Country", "Frequency")
+test<-test[order(test$Frequency, decreasing=T),]
+rownames(test)<-c()
+test[nrow(test)+1,] <- c(NA, sum(is.na(Summary.Data$Country)))
+kable(test)
+
+
+test<-as.data.frame(ftable(as.character(Summary.Data$Isolation.Sources)))
+names(test)<-c("Isolation Source", "Frequency")
+test<-test[order(test$Frequency, decreasing=T),]
+rownames(test)<-c()
+test[nrow(test)+1,] <- c(NA, sum(is.na(Summary.Data$Isolation.Sources)))
+test
+
+
+
+test<-as.data.frame(ftable(Summary.Data$Assembly.Method))
+names(test)<-c("Assembly Method", "Frequency")
+test<-test[order(test$Frequency, decreasing=T),]
+rownames(test)<-c()
+test[nrow(test)+1,] <- c(NA, sum(is.na(Summary.Data$Assembly.Method)))
+kable(test)
+
+test<-as.data.frame(ftable(Summary.Data$Sequencing.Technology))
+names(test)<-c("Sequencing Technology", "Frequency")
+test<-test[order(test$Frequency, decreasing=T),]
+rownames(test)<-c()
+test[nrow(test)+1,] <- c(NA, sum(is.na(Summary.Data$Sequencing.Technology)))
+kable(test)
+
+
+
+summary(Summary.Data$Popset.N.Sequences)
+hist(Summary.Data$Popset.N.Sequences)
+
+summary(Summary.Data$Mean.seq.length)
+hist(Summary.Data$Mean.seq.length)
+
+boxplot(Summary.Data$Mean.seq.length)
+
+boxplot(Summary.Data$date1b)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+Summary.Data$Sampling.Strategy <- c()
+Summary.Data$Source.Population <- c()
+Summary.Data$Gene <- c()
+Summary.Data$Reviewer.Commentary <- c()
+```
+
+
+
+```{r}
+
+for(i in 1:nrow(Summary.Data)){
+  
+  print(paste("Viewing Popset titled", Summary.Data[i,"Popset.Title"]))
+  
+  print(paste("The associated PubMed article linked is titled", Summary.Data[i,"PubMed.Title"]))
+  
+  print(paste("The article can be found at this link:", Summary.Data[i,"PubMed.Link"]))
+ 
+  
+  Summary.Data$Sampling.Strategy[i] <- readline("What mode of surveillance was used?")
+  Summary.Data$Source.Population[i] <- readline("From which population were samples taken?")
+  Summary.Data$Gene[i] <- readline("What gene was sequenced?")
+  Summary.Data$Reviewer.Commentary[i] <- readline("Anything else of note?")
+  
+}
+
+
+
+names(Summary.Data)
+
+```

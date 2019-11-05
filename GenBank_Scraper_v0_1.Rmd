@@ -1,0 +1,799 @@
+---
+title: "Browser Automation for GenBank Search and Data Mining"
+author: "Cody Dailey"
+date: "October 15, 2019"
+output: html_document
+---
+
+
+```{r}
+if(require(RSelenium)){library(RSelenium)}else{install.packages("RSelenium");library(RSelenium)}
+
+
+#print(binman::list_versions("chromedriver"))
+
+#chrome.version <- binman::list_versions("chromedriver")$win32[length(binman::list_versions("chromedriver")$win32)]
+
+chrome.version <- "77.0.3865.40"
+
+
+
+
+dir.create("search_results");dir.create("downloaded_literature")
+downloads.folder <- ".\\search_results"
+
+
+
+
+eCaps <- list(
+  chromeOptions = list(
+  args = c(#'--headless', #headless option has bug of not allowing downloads
+  '--disable-gpu', '--window-size=1280,800'),
+  prefs = list(
+    "profile.default_content_settings.popups" = 0L,
+    "download.prompt_for_download" = FALSE,
+    "download.default_directory" = paste0(gsub("/", "\\\\", getwd()),substr(downloads.folder,2,stop=nchar(downloads.folder)))
+    )
+  )
+)
+
+
+driver <- rsDriver(browser=c("chrome"), chromever=chrome.version, extraCapabilities = eCaps)
+remDr <- driver[["client"]]
+      
+
+remDr$navigate("https://www.ncbi.nlm.nih.gov/genbank/")
+
+
+
+popset.database <- remDr$findElement(using='xpath', '//*[@id="database"]/optgroup[2]/option[26]')
+popset.database$clickElement()
+
+
+search.terms <- remDr$findElement(using='xpath', '//*[@id="term"]')
+search.terms$clickElement()
+      
+search <- '"Plasmodium falciparum"[porgn:__txid5833]'   
+
+search.terms$sendKeysToElement(list(search, key="enter"))
+
+Sys.sleep(3)
+
+
+page.options <- remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[2]/ul/li[2]')
+
+page.options$clickElement()
+
+n.results.option <- remDr$findElement(using='xpath', '//*[@id="ps10"]')
+
+Sys.sleep(2)
+
+n.results.option$clickElement()
+
+Sys.sleep(3)
+
+
+
+n.results <- remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[3]/div[1]/h3')
+
+n <- as.numeric(gsub(",", "", as.character(strsplit(as.character(strsplit(as.character(n.results$getElementText()), "\n")[[1]][1]), " ")[[1]][length(strsplit(as.character(strsplit(as.character(n.results$getElementText()), "\n")[[1]]), " ")[[1]])])))
+
+
+
+results.per.page <- c()
+
+for(n.pages in 1:ceiling(n/10)){
+  results.per.page[n.pages]<-ifelse(n.pages<=ceiling(n/10),10,ceiling(n/10)*10-n)
+}
+
+
+
+Popset.Title <- c()
+Popset.Type <- c()
+Popset.N.Sequences <- c()
+Popset.UID <- c()
+PubMed.Link <- c() 
+PubMed.Title <- c()
+PubMed.Abstract <- c() 
+
+
+
+
+
+for(page in 1:length(results.per.page)){
+
+  print(paste("Scanning Page #", page, "of", ceiling(n/10)))
+
+for(result in 1:results.per.page[page]){
+
+  tryCatch({
+  
+  print(paste("Collecting Popset #", result+(page-1)*10, "of", n))
+
+Popset.title <- unlist(remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[',result,']/div[2]/p/a'))$getElementText())
+
+Popset.type <- unlist(remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[',result,']/div[2]/div[1]/p'))$getElementText())
+
+Popset.n.sequences <- as.numeric(gsub("[^0-9.-]", "", Popset.type))
+
+Popset.ID <- unlist(remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[',result,']/div[2]/div[2]/div/dl/dd'))$getElementText())
+
+tryCatch({
+if(tryCatch({unlist(remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[', result,']/div[2]/div[2]/p/a[1]'))$getElementText())=="PubMed" | unlist(remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[', result,']/div[2]/div[2]/p/a[2]'))$getElementText())=="PubMed"})){
+  
+  
+  if(tryCatch({unlist(remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[', result,']/div[2]/div[2]/p/a[1]'))$getElementText())=="PubMed"}, error=function(e){cat("ERROR Not first link","\n")})){
+    PubMed.link <- unlist(remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[', result,']/div[2]/div[2]/p/a[1]'))$getElementAttribute("href"))
+  remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[',result,']/div[2]/div[2]/p/a[1]'))$clickElement()
+  }else{ 
+  if(tryCatch({unlist(remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[', result,']/div[2]/div[2]/p/a[2]'))$getElementText())=="PubMed"}, error=function(e){cat("ERROR Not second link","\n")})){
+  PubMed.link <- unlist(remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[', result,']/div[2]/div[2]/p/a[1]'))$getElementAttribute("href"))
+  remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[',result,']/div[2]/div[2]/p/a[2]'))$clickElement()
+  }}
+  
+  PubMed.title <- unlist(remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[5]/div/h1')$getElementText())
+
+  PubMed.abstract <- unlist(remDr$findElement(using='xpath', '//*[@id="maincontent"]')$getElementText())
+
+  remDr$goBack()
+  
+}}, error=function(e){cat("ERROR No PubMed","\n")})
+  
+Sys.sleep(1)
+  
+tryCatch({
+
+remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[',result,']/div[2]/p/a'))$clickElement()
+
+  
+  if(substr(unlist(remDr$findElement(using='xpath', '/html/body')$getElementText()), 1, 20)=="Service unavailable!"){
+  remDr$refresh()
+}
+  
+  
+remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[5]/div[1]/div[2]/p/a[1]')$clickElement()
+
+
+
+if(substr(unlist(remDr$findElement(using='xpath', '/html/body')$getElementText()), 1, 20)=="Service unavailable!"){
+  remDr$refresh()
+}
+
+
+
+Sys.sleep(1)
+remDr$findElement(using='xpath', '//*[@id="sendto"]/a')$clickElement()
+
+Sys.sleep(1)
+remDr$findElement(using='xpath', '//*[@id="dest_File"]')$clickElement()
+
+Sys.sleep(1)
+remDr$findElement(using='xpath', '//*[@id="submenu_File"]/button')$clickElement()
+
+Sys.sleep(1)
+remDr$goBack();remDr$goBack()
+  
+
+
+
+}, error=function(e){cat("ERROR Downloading GenBank","\n")}) 
+
+
+  Popset.Title[result+(page-1)*10] <- Popset.title
+  Popset.Type[result+(page-1)*10] <- Popset.type
+  Popset.N.Sequences[result+(page-1)*10] <- Popset.n.sequences
+  Popset.UID[result+(page-1)*10] <- Popset.ID
+
+  PubMed.Link[result+(page-1)*10] <- PubMed.link
+  PubMed.Title[result+(page-1)*10] <- PubMed.title
+  PubMed.Abstract[result+(page-1)*10] <- PubMed.abstract
+
+  
+  }, error=function(e){cat("ERROR in data aggregation","\n")})
+}
+  tryCatch({
+    
+    if(page==1){remDr$findElement(using='xpath', '/html/body/div/div[1]/form/div[1]/div[3]/div/div[3]/div[2]/a[1]')$clickElement()}else{
+    
+  remDr$findElement(using='xpath', '/html/body/div/div[1]/form/div[1]/div[3]/div/div[3]/div[2]/a[3]')$clickElement()
+      
+    }
+      }, error=function(e){cat("Error Next Page","\n")})
+  
+}
+
+
+data <- cbind(Popset.Title, Popset.Type, Popset.N.Sequences, Popset.UID, PubMed.Link, PubMed.Title, PubMed.Abstract)
+
+
+remDr$close()
+driver$server$stop()
+driver$server$process
+```
+
+
+
+```{r}
+Popset.Data <- as.data.frame(data)
+
+
+save(Popset.Data, file="Popset_data_580_records.rdata")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+data[,c("PubMed.Title", "PubMed.Abstract")]
+
+
+```
+
+
+
+```{r}
+
+
+
+
+
+
+
+
+
+
+
+
+remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[',result,']/div[2]/p/a/b'))$clickElement()
+
+remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[5]/div[1]/div[2]/p/a[1]')$clickElement()
+
+
+remDr$findElement(using='xpath', '//*[@id="sendto"]/a')$clickElement()
+
+remDr$findElement(using='xpath', '//*[@id="dest_File"]')$clickElement()
+
+remDr$findElement(using='xpath', '//*[@id="submenu_File"]/button')$clickElement()
+
+
+
+Sys.sleep(120)
+
+
+GenBank.data <- list()
+
+
+
+for(i in 1:Popset.n.sequences){
+  tryCatch({
+  GenBank.data[[i]] <- remDr$findElement(using='xpath', paste0('//*[@id="viewercontent1"]/div[1]/div/pre[',i,']'))$getElementText()
+  }, error=function(e){cat("ERROR in GenBank Format :", conditionMessage(e),"\n")})
+}
+
+
+
+data <- data.frame(Popset.Title=NA,
+                   Popset.Type=NA,
+                   Popset.N.Sequences=NA,
+                   Popset.UID=NA,
+                   PubMed.Link=NA,
+                   PubMed.Title=NA,
+                   PubMed.Abstract=NA,
+                   Sequence.Definition=NA,
+                   Accession=NA,
+                   Sequence.Length=NA, 
+                   Comment=NA, 
+                   Organism=NA,
+                   Molecule.Type=NA,
+                   Isolation.Source=NA,
+                   Country=NA,
+                   Collection.Date=NA,
+                   Sequence=NA)
+
+
+for(j in 1:Popset.n.sequences){
+  
+  data[j,]$Popset.Title <- Popset.title
+  data[j,]$Popset.Type <- Popset.type
+  data[j,]$Popset.N.Sequences <- Popset.n.sequences
+  data[j,]$Popset.UID <- Popset.UID
+  data[j,]$PubMed.Link <- PubMed.link
+  data[j,]$PubMed.Title <- PubMed.title
+  data[j,]$PubMed.Abstract <- PubMed.abstract
+  
+  
+  string <- as.character(GenBank.data[[j]])
+  
+  ev <- list()
+  
+  for(i in 1:length(strsplit(string, split="\n")[[1]])){
+    ev[[i]]<-strsplit(strsplit(string, split="\n")[[1]][i], split=" ")[[1]][strsplit(strsplit(string, split="\n")[[1]][i], split=" ")[[1]]!=""]
+    }
+  
+  to.parse<-unlist(ev)
+  
+  sections <- c("LOCUS", "DEFINITION", "ACCESSION", "COMMENT", "FEATURES", "ORIGIN")
+  
+  data[j,]$Accession <- to.parse[{match(sections, to.parse)[1]+1}]
+  
+  data[j,]$Sequence.Length <- to.parse[{match(sections, to.parse)[1]+2}]
+  
+  data[j,]$Sequence.Definition <- paste(to.parse[{match(sections, to.parse)[2]+1}:{match(sections, to.parse)[3]-1}], collapse=" ")
+  
+  data[j,]$Comment <- paste(to.parse[{match(sections, to.parse)[4]+1}:{match(sections, to.parse)[5]-1}], collapse=" ")
+  
+  features <- paste(to.parse[{match(sections, to.parse)[5]+1}:{match(sections, to.parse)[6]-1}], collapse=" ")
+  
+  features2 <- as.character(strsplit(gsub("=", " ", gsub("/", " ", gsub("\"", " ", features))), split=" ")[[1]])[as.character(strsplit(gsub("=", " ", gsub("/", " ", gsub("\"", " ", features))), split=" ")[[1]])!=""]
+  
+  features.sections <- c("organism", "mol_type", "isolate", "isolation_source", "db_xref", "country", "collection_date", "mRNA")
+  
+  data[j,]$Organism <- paste(features2[{match(features.sections,features2)[1]+1}:{match(features.sections,features2)[2]-1}], collapse=" ")
+  
+  data[j,]$Molecule.Type <- paste(features2[{match(features.sections,features2)[2]+1}:{match(features.sections,features2)[3]-1}], collapse=" ")
+  
+  data[j,]$Isolation.Source <- paste(features2[{match(features.sections,features2)[4]+1}:{match(features.sections,features2)[5]-1}], collapse=" ")
+  
+  data[j,]$Country <- paste(features2[{match(features.sections,features2)[6]+1}:{match(features.sections,features2)[7]-1}], collapse=" ")
+  
+  data[j,]$Collection.Date <- paste(features2[{match(features.sections,features2)[7]+1}:{match(features.sections,features2)[8]-1}], collapse=" ")
+  
+  data[j,]$Sequence <- paste(gsub("//", "", gsub('[[:digit:]]+', '', to.parse[{match("ORIGIN", to.parse)+1}:length(to.parse)])), collapse = "")
+}
+
+}, error=function(e){cat("ERROR :", conditionMessage(e),"\n")})
+
+GB.data[[result.on.page]] <- data
+
+remDr$goBack();remDr$goBack()
+
+
+
+}
+
+
+       
+remDr$close()
+driver$server$stop()
+driver$server$process
+
+      
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+GB.data <- list()
+
+for(result.on.page in 1:200){
+
+  tryCatch({
+  
+  print(paste("Collecting Popset #", result.on.page))
+
+Popset.title <- unlist(remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[',result.on.page,']/div[2]/p/a'))$getElementText())
+
+Popset.type <- unlist(remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[',result.on.page,']/div[2]/div[1]/p'))$getElementText())
+
+Popset.n.sequences <- as.numeric(gsub("[^0-9.-]", "", Popset.type))
+
+
+Popset.UID <- unlist(remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[',result.on.page,']/div[2]/div[2]/div/dl/dd'))$getElementText())
+
+
+
+if(unlist(remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[', result.on.page,']/div[2]/div[2]/p/a[2]'))$getElementText())=="PubMed"){
+  
+  PubMed.link <- unlist(remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[', result.on.page,']/div[2]/div[2]/p/a[2]'))$getElementAttribute("href"))
+  
+  remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[',result.on.page,']/div[2]/div[2]/p/a[2]'))$clickElement()
+  
+  PubMed.title <- unlist(remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[5]/div/h1')$getElementText())
+
+  PubMed.abstract <- unlist(remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[5]/div/div[4]/div/p[1]')$getElementText())
+
+  remDr$goBack()
+  
+}
+
+
+
+remDr$findElement(using='xpath', paste0('//*[@id="maincontent"]/div/div[5]/div[',result.on.page,']/div[2]/p/a/b'))$clickElement()
+
+remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[5]/div[1]/div[2]/p/a[1]')$clickElement()
+
+Sys.sleep(120)
+
+
+GenBank.data <- list()
+
+
+
+for(i in 1:Popset.n.sequences){
+  tryCatch({
+  GenBank.data[[i]] <- remDr$findElement(using='xpath', paste0('//*[@id="viewercontent1"]/div[1]/div/pre[',i,']'))$getElementText()
+  }, error=function(e){cat("ERROR in GenBank Format :", conditionMessage(e),"\n")})
+}
+
+
+
+data <- data.frame(Popset.Title=NA,
+                   Popset.Type=NA,
+                   Popset.N.Sequences=NA,
+                   Popset.UID=NA,
+                   PubMed.Link=NA,
+                   PubMed.Title=NA,
+                   PubMed.Abstract=NA,
+                   Sequence.Definition=NA,
+                   Accession=NA,
+                   Sequence.Length=NA, 
+                   Comment=NA, 
+                   Organism=NA,
+                   Molecule.Type=NA,
+                   Isolation.Source=NA,
+                   Country=NA,
+                   Collection.Date=NA,
+                   Sequence=NA)
+
+
+for(j in 1:Popset.n.sequences){
+  
+  data[j,]$Popset.Title <- Popset.title
+  data[j,]$Popset.Type <- Popset.type
+  data[j,]$Popset.N.Sequences <- Popset.n.sequences
+  data[j,]$Popset.UID <- Popset.UID
+  data[j,]$PubMed.Link <- PubMed.link
+  data[j,]$PubMed.Title <- PubMed.title
+  data[j,]$PubMed.Abstract <- PubMed.abstract
+  
+  
+  string <- as.character(GenBank.data[[j]])
+  
+  ev <- list()
+  
+  for(i in 1:length(strsplit(string, split="\n")[[1]])){
+    ev[[i]]<-strsplit(strsplit(string, split="\n")[[1]][i], split=" ")[[1]][strsplit(strsplit(string, split="\n")[[1]][i], split=" ")[[1]]!=""]
+    }
+  
+  to.parse<-unlist(ev)
+  
+  sections <- c("LOCUS", "DEFINITION", "ACCESSION", "COMMENT", "FEATURES", "ORIGIN")
+  
+  data[j,]$Accession <- to.parse[{match(sections, to.parse)[1]+1}]
+  
+  data[j,]$Sequence.Length <- to.parse[{match(sections, to.parse)[1]+2}]
+  
+  data[j,]$Sequence.Definition <- paste(to.parse[{match(sections, to.parse)[2]+1}:{match(sections, to.parse)[3]-1}], collapse=" ")
+  
+  data[j,]$Comment <- paste(to.parse[{match(sections, to.parse)[4]+1}:{match(sections, to.parse)[5]-1}], collapse=" ")
+  
+  features <- paste(to.parse[{match(sections, to.parse)[5]+1}:{match(sections, to.parse)[6]-1}], collapse=" ")
+  
+  features2 <- as.character(strsplit(gsub("=", " ", gsub("/", " ", gsub("\"", " ", features))), split=" ")[[1]])[as.character(strsplit(gsub("=", " ", gsub("/", " ", gsub("\"", " ", features))), split=" ")[[1]])!=""]
+  
+  features.sections <- c("organism", "mol_type", "isolate", "isolation_source", "db_xref", "country", "collection_date", "mRNA")
+  
+  data[j,]$Organism <- paste(features2[{match(features.sections,features2)[1]+1}:{match(features.sections,features2)[2]-1}], collapse=" ")
+  
+  data[j,]$Molecule.Type <- paste(features2[{match(features.sections,features2)[2]+1}:{match(features.sections,features2)[3]-1}], collapse=" ")
+  
+  data[j,]$Isolation.Source <- paste(features2[{match(features.sections,features2)[4]+1}:{match(features.sections,features2)[5]-1}], collapse=" ")
+  
+  data[j,]$Country <- paste(features2[{match(features.sections,features2)[6]+1}:{match(features.sections,features2)[7]-1}], collapse=" ")
+  
+  data[j,]$Collection.Date <- paste(features2[{match(features.sections,features2)[7]+1}:{match(features.sections,features2)[8]-1}], collapse=" ")
+  
+  data[j,]$Sequence <- paste(gsub("//", "", gsub('[[:digit:]]+', '', to.parse[{match("ORIGIN", to.parse)+1}:length(to.parse)])), collapse = "")
+}
+
+}, error=function(e){cat("ERROR :", conditionMessage(e),"\n")})
+
+GB.data[[result.on.page]] <- data
+
+remDr$goBack();remDr$goBack()
+
+
+
+}
+
+
+       
+remDr$close()
+driver$server$stop()
+driver$server$process
+
+      
+```
+
+
+
+
+
+
+```{r}
+
+#save(GB.data, file="firstrun.rdata")
+#save(GB.data, file="secondrun.rdata")
+
+
+data<-rbind(GB.data[[1]], GB.data[[2]])
+
+for(i in 3:200){
+  data<-rbind(data, GB.data[[i]])
+}
+
+
+GB.data[[3]]
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+Popset.title <- unlist(remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[5]/div[1]/div[2]/p/a')$getElementText())
+
+Popset.type <- unlist(remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[5]/div[1]/div[2]/div[1]/p')$getElementText())
+
+Popset.n.sequences <- as.numeric(gsub("[^0-9.-]", "", Popset.type))
+
+
+Popset.UID <- unlist(remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[5]/div[1]/div[2]/div[2]/div/dl/dd')$getElementText())
+
+
+
+if(unlist(remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[5]/div[1]/div[2]/div[2]/p/a[2]')$getElementText())=="PubMed"){
+  
+  PubMed.link <- unlist(remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[5]/div[1]/div[2]/div[2]/p/a[2]')$getElementAttribute("href"))
+  
+  remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[5]/div[1]/div[2]/div[2]/p/a[2]')$clickElement()
+  
+  PubMed.title <- unlist(remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[5]/div/h1')$getElementText())
+
+  PubMed.abstract <- unlist(remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[5]/div/div[4]/div/p[1]')$getElementText())
+
+  remDr$goBack()
+  
+}
+
+
+
+remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[5]/div[1]/div[2]/p/a/b')$clickElement()
+
+remDr$findElement(using='xpath', '//*[@id="maincontent"]/div/div[5]/div[1]/div[2]/p/a[1]')$clickElement()
+
+Sys.sleep(30)
+
+
+GenBank.data <- list()
+
+
+
+for(i in 1:Popset.n.sequences){
+  GenBank.data[[i]] <- remDr$findElement(using='xpath', paste0('//*[@id="viewercontent1"]/div[1]/div/pre[',i,']'))$getElementText()
+}
+
+
+
+data <- data.frame(Popset.Title=NA,
+                   Popset.Type=NA,
+                   Popset.N.Sequences=NA,
+                   Popset.UID=NA,
+                   PubMed.Link=NA,
+                   PubMed.Title=NA,
+                   PubMed.Abstract=NA,
+                   Sequence.Definition=NA,
+                   Accession=NA,
+                   Sequence.Length=NA, 
+                   Comment=NA, 
+                   Organism=NA,
+                   Molecule.Type=NA,
+                   Isolation.Source=NA,
+                   Country=NA,
+                   Collection.Date=NA,
+                   Sequence=NA)
+
+
+for(j in 1:Popset.n.sequences){
+  
+  data[j,]$Popset.Title <- Popset.title
+  data[j,]$Popset.Type <- Popset.type
+  data[j,]$Popset.N.Sequences <- Popset.n.sequences
+  data[j,]$Popset.UID <- Popset.UID
+  data[j,]$PubMed.Link <- PubMed.link
+  data[j,]$PubMed.Title <- PubMed.title
+  data[j,]$PubMed.Abstract <- PubMed.abstract
+  
+  
+  string <- as.character(GenBank.data[[j]])
+  
+  ev <- list()
+  
+  for(i in 1:length(strsplit(string, split="\n")[[1]])){
+    ev[[i]]<-strsplit(strsplit(string, split="\n")[[1]][i], split=" ")[[1]][strsplit(strsplit(string, split="\n")[[1]][i], split=" ")[[1]]!=""]
+    }
+  
+  to.parse<-unlist(ev)
+  
+  sections <- c("LOCUS", "DEFINITION", "ACCESSION", "COMMENT", "FEATURES", "ORIGIN")
+  
+  data[j,]$Accession <- to.parse[{match(sections, to.parse)[1]+1}]
+  
+  data[j,]$Sequence.Length <- to.parse[{match(sections, to.parse)[1]+2}]
+  
+  data[j,]$Sequence.Definition <- paste(to.parse[{match(sections, to.parse)[2]+1}:{match(sections, to.parse)[3]-1}], collapse=" ")
+  
+  data[j,]$Comment <- paste(to.parse[{match(sections, to.parse)[4]+1}:{match(sections, to.parse)[5]-1}], collapse=" ")
+  
+  features <- paste(to.parse[{match(sections, to.parse)[5]+1}:{match(sections, to.parse)[6]-1}], collapse=" ")
+  
+  features2 <- as.character(strsplit(gsub("=", " ", gsub("/", " ", gsub("\"", " ", features))), split=" ")[[1]])[as.character(strsplit(gsub("=", " ", gsub("/", " ", gsub("\"", " ", features))), split=" ")[[1]])!=""]
+  
+  features.sections <- c("organism", "mol_type", "isolate", "isolation_source", "db_xref", "country", "collection_date", "mRNA")
+  
+  data[j,]$Organism <- paste(features2[{match(features.sections,features2)[1]+1}:{match(features.sections,features2)[2]-1}], collapse=" ")
+  
+  data[j,]$Molecule.Type <- paste(features2[{match(features.sections,features2)[2]+1}:{match(features.sections,features2)[3]-1}], collapse=" ")
+  
+  data[j,]$Isolation.Source <- paste(features2[{match(features.sections,features2)[4]+1}:{match(features.sections,features2)[5]-1}], collapse=" ")
+  
+  data[j,]$Country <- paste(features2[{match(features.sections,features2)[6]+1}:{match(features.sections,features2)[7]-1}], collapse=" ")
+  
+  data[j,]$Collection.Date <- paste(features2[{match(features.sections,features2)[7]+1}:{match(features.sections,features2)[8]-1}], collapse=" ")
+  
+  data[j,]$Sequence <- paste(gsub("//", "", gsub('[[:digit:]]+', '', to.parse[{match("ORIGIN", to.parse)+1}:length(to.parse)])), collapse = "")
+}
+
+
+
+```
